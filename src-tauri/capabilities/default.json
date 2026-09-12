@@ -1,0 +1,23 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "enables the default permissions",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "autostart:allow-enable",
+    "autostart:allow-disable",
+    "autostart:allow-is-enabled",
+    "notification:allow-request-permission",
+    "notification:allow-is-permission-granted",
+    "notification:allow-check-permissions",
+    "notification:allow-permission-state",
+    "notification:allow-show",
+    "notification:allow-notify",
+    "thermal-printer:default",
+    "process:allow-restart",
+    "process:allow-exit"
+  ]
+}

@@ -1,0 +1,95 @@
+name: Release Ku Meza
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+
+  release:
+    name: Build and Release Windows
+    runs-on: windows-latest
+
+    steps:
+
+      # --------------------------------
+      # 1. Récupérer le code
+      # --------------------------------
+      - name: Checkout
+        uses: actions/checkout@v4
+
+
+      # --------------------------------
+      # 2. Installer Node.js
+      # --------------------------------
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+
+      # --------------------------------
+      # 3. Installer Rust
+      # --------------------------------
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+
+      # --------------------------------
+      # 4. Cache Rust
+      # --------------------------------
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+
+      # --------------------------------
+      # 5. Installer les dépendances React
+      # --------------------------------
+      - name: Install frontend dependencies
+        run: npm ci
+
+
+      # --------------------------------
+      # 6. Build + Release Tauri
+      # --------------------------------
+      - name: Build and publish Tauri
+        uses: tauri-apps/tauri-action@v0
+
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+        with:
+          tagName: ${{ github.ref_name }}
+
+          releaseName: "Ku Meza ${{ github.ref_name }}"
+
+          releaseBody: |
+            ## Ku Meza ${{ github.ref_name }}
+
+            Nouvelle version de Ku Meza.
+
+            ### Installation
+
+            Les utilisateurs ayant déjà Ku Meza installé
+            recevront automatiquement cette mise à jour.
+
+          releaseDraft: false
+
+          prerelease: false
+
+          args: "--bundles nsis"
+
+          uploadUpdaterJson: true
+
+          uploadUpdaterSignatures: true

@@ -1,0 +1,58 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "ku_meza",
+  "version": "0.1.0",
+  "identifier": "com.kumeza.desktop",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "npm start",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Ku Meza",
+        "width": 800,
+        "height": 600,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "createUpdaterArtifacts": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "resources": [
+      "resources/*"
+    ],
+    "android": {
+      "debugApplicationIdSuffix": ".debug"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "active": true,
+      "windows": {
+        "installMode": "passive"
+      },
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IERBRUY3NDhFOTU5MjM2MDEKUldRQk5wS1ZqblR2MnFDbEJlTVQ5QW42b3FYdGE5cHdmdmVnenVDZW1mdDgwNXpPR2kwYXhvZWwK",
+      "endpoints": [
+        "https://github.com/MrTelecomUnite/ku_meza/releases/latest/download/latest.json"
+      ],
+      "dialog": true,
+      "header": "authorization"
+    }
+  }
+}
