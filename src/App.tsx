@@ -14,7 +14,8 @@ import PlatsList from './PlatsList';
 // ============ TYPES ============
 
 import FactureTest from './FactureTest';
-import { checkForUpdates } from './type';
+
+import UpdateNotification from './UpdateNotification';
 
 
 interface SystemInfo {
@@ -52,14 +53,6 @@ function App() {
   const [notificationTestStatus, setNotificationTestStatus] = useState<string>('');
   const [permissionGranted, setPermissionGranted] = useState<boolean>(false);
 
-  useEffect(() => {
-    // Vérifier les mises à jour 3 secondes après le démarrage
-    const timer = setTimeout(() => {
-      checkForUpdates();
-    }, 3000);
-
-    return () => clearTimeout(timer);
-  }, []);
 
   // ===== DEMANDER LES PERMISSIONS =====
   useEffect(() => {
@@ -280,7 +273,7 @@ function App() {
       background: '#1a1a2e',
       color: '#e0e0e0'
     }}>
-
+      <UpdateNotification />
       <div>
         <FactureTest />
       </div>
@@ -424,7 +417,7 @@ function App() {
         </div>
       )}
 
-    
+
 
       {/* ============ SECTION TEST NOTIFICATION ============ */}
       <div style={{

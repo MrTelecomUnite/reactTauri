@@ -92,7 +92,7 @@ jobs:
           prerelease: false
 
           # Générer NSIS + MSI
-          args: "--bundles nsis,msi"
+          args: "--bundles nsis"
 
           # Générer latest.json pour Tauri Updater
           includeUpdaterJson: true
