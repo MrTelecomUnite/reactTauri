@@ -72,10 +72,14 @@ jobs:
 
           args: "--bundles nsis,msi"
 
-          uploadUpdaterJson: true
+          # Générer et envoyer latest.json
+          includeUpdaterJson: true
 
+          # Envoyer les fichiers .sig
           uploadUpdaterSignatures: true
 
+          # Utiliser NSIS (.exe) pour l'Updater
           updaterJsonPreferNsis: true
 
+          # Réessayer en cas d'échec temporaire
           retryAttempts: 3
