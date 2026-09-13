@@ -16,24 +16,50 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2.6.3", features = [] }
 
 [dependencies]
-serde_json = "1.0"
-serde = { version = "1.0", features = ["derive"] }
-log = "0.4"
+# ===== Tauri core =====
 tauri = { version = "2.11.3", features = [] }
 tauri-plugin-log = "2"
-sysinfo = "0.38"
-reqwest = { version = "0.13", features = ["blocking"] }
-local-ip-address = "0.6"
-tauri-plugin-notification = "2"
-thermoprint = "0.3.0"
-tauri-plugin-thermal-printer = "2.1.4"
-rust_decimal = { version = "1.43.0", features = ["macros"] }
-serialport = "4.10.1"
 tauri-plugin-process = "2.3.1"
 
+# ===== Sérialisation =====
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# ===== Logging =====
+log = "0.4"
+
+# ===== Infos système =====
+sysinfo = "0.38"
+
+# ===== Réseau =====
+reqwest = { version = "0.13", features = ["blocking"] }
+local-ip-address = "0.6"
+
+# ===== Ping natif (sans CMD/PowerShell) =====
+surge-ping = "0.9"
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "net", "time", "macros"] }
+
+# ===== Notifications (natif) =====
+tauri-plugin-notification = "2"
+
+# ===== Impression thermique =====
+tauri-plugin-thermal-printer = "2.1.4"
+thermoprint = "0.3.0"
+serialport = "4.10.1"
+
+# ===== Calculs monétaires =====
+rust_decimal = { version = "1.43.0", features = ["macros"] }
+
+# ===== Plugins conditionnels (desktop uniquement) =====
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-autostart = "2"
 tauri-plugin-updater = "2"
 
-# ====== CORRECTION ICI ======
-
+# ===== API Windows native pour l'impression =====
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Printing",
+    "Win32_Graphics_Gdi",
+    "Win32_Storage_Xps",
+] }

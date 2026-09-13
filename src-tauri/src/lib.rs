@@ -7,7 +7,6 @@ use tauri_plugin_notification::NotificationExt; // ← IMPORTANT
 
 
 
-
 #[derive(Serialize, Clone)]
 struct SystemInfo {
     os_name: String,
@@ -153,19 +152,27 @@ fn check_network_status() -> NetworkInfo {
 }
 
 fn check_internet_connection() -> bool {
-    let ping_result = std::process::Command::new("ping")
-        .arg("-n")
-        .arg("1")
-        .arg("8.8.8.8")
-        .output();
+    use std::net::TcpStream;
+    use std::time::Duration;
 
-    if let Ok(output) = ping_result {
-        return output.status.success();
+    // Essai 1 : TCP connect (rapide, pas de droits admin)
+    if TcpStream::connect_timeout(
+        &"8.8.8.8:53".parse().unwrap(),
+        Duration::from_secs(2),
+    ).is_ok() {
+        return true;
+    }
+
+    // Essai 2 : TCP connect sur Cloudflare
+    if TcpStream::connect_timeout(
+        &"1.1.1.1:53".parse().unwrap(),
+        Duration::from_secs(2),
+    ).is_ok() {
+        return true;
     }
 
     false
 }
-
 
 fn get_local_ip() -> String {
     if let Ok(ip) = local_ip() {
@@ -192,473 +199,108 @@ fn get_public_ip() -> Option<String> {
     None
 }
 
-// ============ FONCTION PRINCIPALE ============
-
-#[tauri::command]
-fn get_printers() -> Result<Vec<PrinterInfo>, String> {
-    #[cfg(target_os = "windows")]
-    {
-        get_printers_windows()
-    }
-
-    #[cfg(target_os = "macos")]
-    {
-        get_printers_macos()
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        get_printers_linux()
-    }
-
-    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
-    {
-        Err("Système d'exploitation non supporté".to_string())
-    }
-}
-
-// ============ IMPLÉMENTATION WINDOWS ============
-
-#[cfg(target_os = "windows")]
-fn get_printers_windows() -> Result<Vec<PrinterInfo>, String> {
-    use std::process::Command;
-
-    let output = Command::new("powershell")
-        .args([
-            "-Command",
-            "Get-Printer | Select-Object Name, DriverName, PortName, PrinterStatus, Default, Location | ConvertTo-Json"
-        ])
-        .output()
-        .map_err(|e| format!("Erreur PowerShell: {}", e))?;
-
-    if !output.status.success() {
-        return Err("Échec de l'exécution PowerShell".to_string());
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-
-    if stdout.trim().is_empty() || stdout.trim() == "null" {
-        return Ok(Vec::new());
-    }
-
-    let mut printers = Vec::new();
-    let lines: Vec<&str> = stdout.lines().collect();
-    let json_str = lines.join("");
-
-    if let Some(printers_json) = parse_printers_json(&json_str) {
-        printers = printers_json;
-    }
-
-    Ok(printers)
-}
-
-#[cfg(target_os = "windows")]
-fn parse_printers_json(json: &str) -> Option<Vec<PrinterInfo>> {
-    let mut printers = Vec::new();
-
-    if json.starts_with('[') {
-        let objects = json.trim_start_matches('[').trim_end_matches(']');
-        let mut current_obj = String::new();
-        let mut in_string = false;
-        let mut brace_count = 0;
-
-        for ch in objects.chars() {
-            if ch == '"' {
-                in_string = !in_string;
-            }
-
-            if !in_string {
-                if ch == '{' {
-                    brace_count += 1;
-                } else if ch == '}' {
-                    brace_count -= 1;
-                }
-            }
-
-            current_obj.push(ch);
-
-            if brace_count == 0 && !current_obj.is_empty() {
-                if let Some(printer) = parse_single_printer(&current_obj) {
-                    printers.push(printer);
-                }
-                current_obj.clear();
-            }
-        }
-    } else if json.starts_with('{') {
-        if let Some(printer) = parse_single_printer(json) {
-            printers.push(printer);
-        }
-    }
-
-    Some(printers)
-}
-
-#[cfg(target_os = "windows")]
-fn parse_single_printer(obj: &str) -> Option<PrinterInfo> {
-    let get_field = |field: &str| -> Option<String> {
-        let pattern = format!("\"{}\":", field);
-        if let Some(start) = obj.find(&pattern) {
-            let start = start + pattern.len();
-            let rest = &obj[start..].trim_start();
-            if rest.starts_with('"') {
-                let end = rest[1..].find('"')? + 1;
-                return Some(rest[1..end].to_string());
-            } else {
-                let end = rest.find(',').or_else(|| rest.find('}'))?;
-                return Some(rest[..end].trim().to_string());
-            }
-        }
-        None
-    };
-
-    let name = get_field("Name")?;
-    if name == "null" || name.is_empty() {
-        return None;
-    }
-
-    let driver = get_field("DriverName").filter(|s| s != "null");
-    let port = get_field("PortName").filter(|s| s != "null");
-    let location = get_field("Location").filter(|s| s != "null");
-    let is_default = get_field("Default").map(|s| s == "true").unwrap_or(false);
-
-    let connection_type = if let Some(port_ref) = &port {
-        detect_connection_type_windows(port_ref)
-    } else {
-        PrinterConnectionType::Unknown
-    };
-
-    let status = if let Some(status_str) = get_field("PrinterStatus") {
-        match status_str.as_str() {
-            "0" | "Normal" => PrinterStatus::Ready,
-            "1" | "Paused" => PrinterStatus::Paused,
-            "2" | "Error" => PrinterStatus::Error,
-            "3" | "PendingDeletion" => PrinterStatus::PendingDeletion,
-            "4" | "PaperJam" => PrinterStatus::PaperJam,
-            "5" | "PaperOut" => PrinterStatus::PaperOut,
-            "8" | "Offline" => PrinterStatus::Offline,
-            "11" | "Printing" => PrinterStatus::Printing,
-            _ => PrinterStatus::Unknown,
-        }
-    } else {
-        PrinterStatus::Unknown
-    };
-
-    Some(PrinterInfo {
-        name,
-        connection_type,
-        status,
-        is_default,
-        model: driver,
-        location,
-        port,
-    })
-}
-
-#[cfg(target_os = "windows")]
-fn detect_connection_type_windows(port: &str) -> PrinterConnectionType {
-    let port_lower = port.to_lowercase();
-
-    if port_lower.contains("usb") {
-        PrinterConnectionType::USB
-    } else if port_lower.contains("wifi") || port_lower.contains("wireless") {
-        PrinterConnectionType::WiFi
-    } else if port_lower.contains("bluetooth") || port_lower.contains("bt") {
-        PrinterConnectionType::Bluetooth
-    } else if port_lower.contains("network")
-        || port_lower.contains("tcp")
-        || port_lower.contains("ip")
-    {
-        PrinterConnectionType::Network
-    } else if port_lower.contains("parallel") || port_lower.contains("lpt") {
-        PrinterConnectionType::Parallel
-    } else if port_lower.contains("serial") || port_lower.contains("com") {
-        PrinterConnectionType::Serial
-    } else {
-        PrinterConnectionType::Unknown
-    }
-}
-
-// ============ IMPLÉMENTATION MACOS ============
-
-#[cfg(target_os = "macos")]
-fn get_printers_macos() -> Result<Vec<PrinterInfo>, String> {
-    use std::process::Command;
-
-    let output = Command::new("lpinfo")
-        .args(["-v"])
-        .output()
-        .map_err(|e| format!("Erreur lpinfo: {}", e))?;
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let mut printers = Vec::new();
-
-    for line in stdout.lines() {
-        if line.contains("direct") || line.contains("network") {
-            let parts: Vec<&str> = line.split_whitespace().collect();
-            if parts.len() >= 2 {
-                let connection_type = if line.contains("usb") {
-                    PrinterConnectionType::USB
-                } else if line.contains("bluetooth") {
-                    PrinterConnectionType::Bluetooth
-                } else if line.contains("network") || line.contains("http") || line.contains("ipp")
-                {
-                    PrinterConnectionType::Network
-                } else if line.contains("wifi") || line.contains("wireless") {
-                    PrinterConnectionType::WiFi
-                } else {
-                    PrinterConnectionType::Unknown
-                };
-
-                let name = parts[1..].join(" ");
-
-                printers.push(PrinterInfo {
-                    name: name.clone(),
-                    connection_type,
-                    status: PrinterStatus::Ready,
-                    is_default: false,
-                    model: Some(name),
-                    location: None,
-                    port: None,
-                });
-            }
-        }
-    }
-
-    if let Ok(output) = Command::new("lpstat").args(["-d"]).output() {
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        if let Some(default_line) = stdout.lines().next() {
-            if let Some(printer_name) = default_line.split(' ').last() {
-                for printer in &mut printers {
-                    if printer.name.contains(printer_name) {
-                        printer.is_default = true;
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-    Ok(printers)
-}
-
-// ============ IMPLÉMENTATION LINUX ============
-
-#[cfg(target_os = "linux")]
-fn get_printers_linux() -> Result<Vec<PrinterInfo>, String> {
-    use std::process::Command;
-
-    let output = Command::new("lpinfo")
-        .args(["-v"])
-        .output()
-        .map_err(|e| format!("Erreur lpinfo: {}", e))?;
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let mut printers = Vec::new();
-
-    for line in stdout.lines() {
-        if line.contains("direct") || line.contains("network") {
-            let connection_type = if line.contains("usb") {
-                PrinterConnectionType::USB
-            } else if line.contains("bluetooth") {
-                PrinterConnectionType::Bluetooth
-            } else if line.contains("network") || line.contains("http") || line.contains("ipp") {
-                PrinterConnectionType::Network
-            } else if line.contains("wifi") || line.contains("wireless") {
-                PrinterConnectionType::WiFi
-            } else {
-                PrinterConnectionType::Unknown
-            };
-
-            let parts: Vec<&str> = line.split_whitespace().collect();
-            if parts.len() >= 2 {
-                let name = parts[1..].join(" ");
-                printers.push(PrinterInfo {
-                    name: name.clone(),
-                    connection_type,
-                    status: PrinterStatus::Ready,
-                    is_default: false,
-                    model: Some(name),
-                    location: None,
-                    port: None,
-                });
-            }
-        }
-    }
-
-    if let Ok(output) = Command::new("lpstat").args(["-d"]).output() {
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        if let Some(default_line) = stdout.lines().next() {
-            if let Some(printer_name) = default_line.split(' ').last() {
-                for printer in &mut printers {
-                    if printer.name.contains(printer_name) {
-                        printer.is_default = true;
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-    Ok(printers)
-}
-
-// ============ COMMANDE TAURI POUR LE STATUT ============
-
-#[tauri::command]
-fn get_printer_status(printer_name: String) -> Result<PrinterStatus, String> {
-    #[cfg(target_os = "windows")]
-    {
-        get_printer_status_windows(&printer_name)
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        Ok(PrinterStatus::Ready)
-    }
-}
-
-#[cfg(target_os = "windows")]
-fn get_printer_status_windows(printer_name: &str) -> Result<PrinterStatus, String> {
-    use std::process::Command;
-
-    let output = Command::new("powershell")
-        .args([
-            "-Command",
-            &format!("(Get-Printer -Name '{}').PrinterStatus", printer_name),
-        ])
-        .output()
-        .map_err(|e| format!("Erreur PowerShell: {}", e))?;
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let status_str = stdout.trim();
-
-    match status_str {
-        "0" | "Normal" => Ok(PrinterStatus::Ready),
-        "1" | "Paused" => Ok(PrinterStatus::Paused),
-        "2" | "Error" => Ok(PrinterStatus::Error),
-        "3" | "PendingDeletion" => Ok(PrinterStatus::PendingDeletion),
-        "4" | "PaperJam" => Ok(PrinterStatus::PaperJam),
-        "5" | "PaperOut" => Ok(PrinterStatus::PaperOut),
-        "8" | "Offline" => Ok(PrinterStatus::Offline),
-        "11" | "Printing" => Ok(PrinterStatus::Printing),
-        _ => Ok(PrinterStatus::Unknown),
-    }
-}
-
 
 // ============ COMMANDE D'IMPRESSION DE FACTURE ============
 
-#[tauri::command]
-fn imprimer_facture(data: FactureData) -> Result<String, String> {
-    // 1. Construire les octets ESC/POS
-    let bytes = build_facture_bytes(&data)?;
+#[cfg(target_os = "windows")]
+fn envoyer_a_imprimante_windows(printer_name: &str, bytes: &[u8]) -> Result<(), String> {
+    use windows::core::PSTR;
+    use windows::Win32::Graphics::Printing::{
+        ClosePrinter, EndDocPrinter, EndPagePrinter,
+        OpenPrinterA, StartDocPrinterA, StartPagePrinter,
+        WritePrinter, DOC_INFO_1A,
+    };
+    use windows::Win32::Foundation::HANDLE;  // ← Utiliser HANDLE
 
-    // 2. Écrire les octets dans un fichier temporaire
-    let temp_path = std::env::temp_dir().join("facture_escpos.bin");
-    std::fs::write(&temp_path, &bytes)
-        .map_err(|e| format!("Erreur écriture fichier temporaire : {}", e))?;
+    let printer_cstr = std::ffi::CString::new(printer_name)
+        .map_err(|e| format!("Nom imprimante invalide : {}", e))?;
 
-    // 3. Envoyer le fichier à l'imprimante via PowerShell
-    #[cfg(target_os = "windows")]
-    {
-        use std::os::windows::process::CommandExt;
-        const CREATE_NO_WINDOW: u32 = 0x08000000;
+    unsafe {
+        let mut h_printer = HANDLE::default();  // ← HANDLE au lieu de PRINTER_HANDLE
 
-        // Échapper le chemin et le nom de l'imprimante
-        let temp_path_str = temp_path.display().to_string().replace('\\', "/");
-        let printer_name_escaped = data.printer_name.replace('\'', "''");
+        // Ouvrir l'imprimante
+        if OpenPrinterA(
+            windows::core::PCSTR(printer_cstr.as_ptr() as *const u8),
+            &mut h_printer,
+            None,
+        ).is_err() {
+            return Err(format!("Impossible d'ouvrir l'imprimante '{}'", printer_name));
+        }
 
-        // Script PowerShell pour envoyer les octets bruts à l'imprimante
-        let script = format!(
-            r#"
-            $bytes = [System.IO.File]::ReadAllBytes('{}');
-            $printerName = '{}';
-            Add-Type -TypeDefinition @"
-                using System;
-                using System.Runtime.InteropServices;
-                public class RawPrinterHelper {{
-                    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
-                    public class DOCINFOA {{
-                        [MarshalAs(UnmanagedType.LPStr)] public string pDocName;
-                        [MarshalAs(UnmanagedType.LPStr)] public string pOutputFile;
-                        [MarshalAs(UnmanagedType.LPStr)] public string pDataType;
-                    }}
-                    [DllImport("winspool.Drv", EntryPoint="OpenPrinterA", SetLastError=true, CharSet=CharSet.Ansi, ExactSpelling=true)]
-                    public static extern bool OpenPrinter(string szPrinter, out IntPtr hPrinter, IntPtr pd);
-                    [DllImport("winspool.Drv", EntryPoint="ClosePrinter", SetLastError=true, ExactSpelling=true)]
-                    public static extern bool ClosePrinter(IntPtr hPrinter);
-                    [DllImport("winspool.Drv", EntryPoint="StartDocPrinterA", SetLastError=true, CharSet=CharSet.Ansi, ExactSpelling=true)]
-                    public static extern bool StartDocPrinter(IntPtr hPrinter, int level, [In, MarshalAs(UnmanagedType.LPStruct)] DOCINFOA di);
-                    [DllImport("winspool.Drv", EntryPoint="EndDocPrinter", SetLastError=true, ExactSpelling=true)]
-                    public static extern bool EndDocPrinter(IntPtr hPrinter);
-                    [DllImport("winspool.Drv", EntryPoint="StartPagePrinter", SetLastError=true, ExactSpelling=true)]
-                    public static extern bool StartPagePrinter(IntPtr hPrinter);
-                    [DllImport("winspool.Drv", EntryPoint="EndPagePrinter", SetLastError=true, ExactSpelling=true)]
-                    public static extern bool EndPagePrinter(IntPtr hPrinter);
-                    [DllImport("winspool.Drv", EntryPoint="WritePrinter", SetLastError=true, ExactSpelling=true)]
-                    public static extern bool WritePrinter(IntPtr hPrinter, IntPtr pBytes, int dwCount, out int dwWritten);
-                    public static bool SendBytesToPrinter(string printerName, byte[] bytes) {{
-                        IntPtr hPrinter;
-                        DOCINFOA di = new DOCINFOA();
-                        di.pDocName = "Facture ESC/POS";
-                        di.pDataType = "RAW";
-                        if (!OpenPrinter(printerName, out hPrinter, IntPtr.Zero)) return false;
-                        if (!StartDocPrinter(hPrinter, 1, di)) {{ ClosePrinter(hPrinter); return false; }}
-                        if (!StartPagePrinter(hPrinter)) {{ EndDocPrinter(hPrinter); ClosePrinter(hPrinter); return false; }}
-                        IntPtr pUnmanagedBytes = Marshal.AllocCoTaskMem(bytes.Length);
-                        Marshal.Copy(bytes, 0, pUnmanagedBytes, bytes.Length);
-                        int dwWritten;
-                        bool success = WritePrinter(hPrinter, pUnmanagedBytes, bytes.Length, out dwWritten);
-                        Marshal.FreeCoTaskMem(pUnmanagedBytes);
-                        EndPagePrinter(hPrinter);
-                        EndDocPrinter(hPrinter);
-                        ClosePrinter(hPrinter);
-                        return success;
-                    }}
-                }}
-"@;
-            $success = [RawPrinterHelper]::SendBytesToPrinter($printerName, $bytes);
-            if ($success) {{ Write-Output "OK" }} else {{ Write-Error "Échec de l'impression" }}
-            "#,
-            temp_path_str, printer_name_escaped
+        // Démarrer le document
+        let doc_name = std::ffi::CString::new("Facture ESC/POS").unwrap();
+        let data_type = std::ffi::CString::new("RAW").unwrap();
+
+        let doc_info = DOC_INFO_1A {
+            pDocName: PSTR(doc_name.as_ptr() as *mut u8),
+            pOutputFile: PSTR(std::ptr::null_mut()),
+            pDatatype: PSTR(data_type.as_ptr() as *mut u8),
+        };
+
+        // StartDocPrinterA retourne un DWORD (0 = échec)
+        if StartDocPrinterA(h_printer, 1, &doc_info) == 0 {
+            let _ = ClosePrinter(h_printer);
+            return Err("Impossible de démarrer le document".to_string());
+        }
+
+        // StartPagePrinter retourne un BOOL
+        if StartPagePrinter(h_printer).as_bool() == false {
+            let _ = EndDocPrinter(h_printer);
+            let _ = ClosePrinter(h_printer);
+            return Err("Impossible de démarrer la page".to_string());
+        }
+
+        // Envoyer les octets
+        let mut written = 0u32;
+        let result = WritePrinter(
+            h_printer,
+            bytes.as_ptr() as *const _,
+            bytes.len() as u32,
+            &mut written,
         );
 
-        let output = std::process::Command::new("powershell")
-            .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &script])
-            .creation_flags(CREATE_NO_WINDOW)
-            .output()
-            .map_err(|e| format!("Erreur PowerShell : {}", e))?;
+        let _ = EndPagePrinter(h_printer);
+        let _ = EndDocPrinter(h_printer);
+        let _ = ClosePrinter(h_printer);
 
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            return Err(format!(
-                "Échec impression (code {}):\nSTDOUT: {}\nSTDERR: {}",
-                output.status, stdout, stderr
-            ));
+        if result.as_bool() == false {
+            return Err("Échec de l'envoi des données".to_string());
         }
     }
 
-    // macOS / Linux : utiliser la commande `lp`
+    Ok(())
+}
+
+#[tauri::command]
+fn imprimer_facture(data: FactureData) -> Result<String, String> {
+    let bytes = build_facture_bytes(&data)?;
+
+    #[cfg(target_os = "windows")]
+    {
+        envoyer_a_imprimante_windows(&data.printer_name, &bytes)?;
+    }
+
     #[cfg(not(target_os = "windows"))]
     {
+        // macOS/Linux : `lp` est natif, pas de problème de perf
+        let temp_path = std::env::temp_dir().join("facture_escpos.bin");
+        std::fs::write(&temp_path, &bytes)
+            .map_err(|e| format!("Erreur écriture : {}", e))?;
+
         let output = std::process::Command::new("lp")
-            .arg("-d")
-            .arg(&data.printer_name)
-            .arg("-o")
-            .arg("raw")
+            .arg("-d").arg(&data.printer_name)
+            .arg("-o").arg("raw")
             .arg(&temp_path)
             .output()
             .map_err(|e| format!("Erreur lp : {}", e))?;
 
+        let _ = std::fs::remove_file(&temp_path);
+
         if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("Échec impression : {}", stderr));
+            return Err(format!("Échec impression : {}",
+                String::from_utf8_lossy(&output.stderr)));
         }
     }
-
-    // Nettoyer le fichier temporaire
-    let _ = std::fs::remove_file(&temp_path);
 
     Ok(format!("✅ Facture imprimée sur '{}'", data.printer_name))
 }
@@ -781,6 +423,7 @@ fn encoder_cp850(s: &str) -> Vec<u8> {
     }).collect()
 }
 
+
 // ============ POINT D'ENTRÉE ============
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -793,9 +436,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_system_info,
             check_network_status,
-            get_printers,
-            get_printer_status,
-            imprimer_facture,
+            imprimer_facture
         ])
         .setup(|app| {
             if cfg!(debug_assertions) {

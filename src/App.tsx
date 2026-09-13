@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from '@tauri-apps/api/event';
+import "./App.css"
 import {
   isPermissionGranted,
   requestPermission,
@@ -13,6 +14,7 @@ import PlatsList from './PlatsList';
 // ============ TYPES ============
 
 import FactureTest from './FactureTest';
+import { checkForUpdates } from './type';
 
 
 interface SystemInfo {
@@ -34,15 +36,6 @@ interface NetworkInfo {
   public_ip: string | null;
 }
 
-interface PrinterInfo {
-  name: string;
-  connection_type: string;
-  status: string;
-  is_default: boolean;
-  model: string | null;
-  location: string | null;
-  port: string | null;
-}
 
 interface NotificationPayload {
   title: string;
@@ -56,10 +49,17 @@ function App() {
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
   const [networkInfo, setNetworkInfo] = useState<NetworkInfo | null>(null);
   const [internetStatus, setInternetStatus] = useState<boolean | null>(null);
-  const [printers, setPrinters] = useState<PrinterInfo[]>([]);
-  const [loadingPrinters, setLoadingPrinters] = useState(false);
   const [notificationTestStatus, setNotificationTestStatus] = useState<string>('');
   const [permissionGranted, setPermissionGranted] = useState<boolean>(false);
+
+  useEffect(() => {
+    // Vérifier les mises à jour 3 secondes après le démarrage
+    const timer = setTimeout(() => {
+      checkForUpdates();
+    }, 3000);
+
+    return () => clearTimeout(timer);
+  }, []);
 
   // ===== DEMANDER LES PERMISSIONS =====
   useEffect(() => {
@@ -95,7 +95,7 @@ function App() {
     setupPermissions();
   }, []);
 
- 
+
   // ===== ÉCOUTER LES ÉVÉNEMENTS =====
   useEffect(() => {
     const setupListeners = async () => {
@@ -153,43 +153,10 @@ function App() {
         setNetworkInfo(info);
       })
       .catch((error) => console.error("Erreur check_network_status:", error));
-
-    fetchPrinters();
   }, []);
 
   // ============ FONCTIONS POUR LES IMPRIMANTES ============
 
-  const fetchPrinters = async () => {
-    setLoadingPrinters(true);
-    try {
-      const printersList = await invoke<PrinterInfo[]>('get_printers');
-      console.log('Imprimantes:', printersList);
-      setPrinters(printersList);
-
-      printersList.forEach((printer: PrinterInfo) => {
-        console.log(`- ${printer.name}`);
-        console.log(`  Type: ${printer.connection_type}`);
-        console.log(`  Statut: ${printer.status}`);
-        console.log(`  Défaut: ${printer.is_default ? '✅' : '❌'}`);
-        console.log(`  Modèle: ${printer.model || 'Inconnu'}`);
-      });
-    } catch (error) {
-      console.error('Erreur lors de la récupération des imprimantes:', error);
-    } finally {
-      setLoadingPrinters(false);
-    }
-  };
-
-  const getPrinterStatus = async (printerName: string) => {
-    try {
-      const status = await invoke<string>('get_printer_status', { printerName });
-      console.log(`Statut de ${printerName}:`, status);
-      return status;
-    } catch (error) {
-      console.error('Erreur:', error);
-      return null;
-    }
-  };
 
   // ============ FONCTIONS DE TEST DE NOTIFICATION ============
 
@@ -306,7 +273,7 @@ function App() {
 
   return (
     <div style={{
-      padding: '20px',
+      padding: '2px',
       fontFamily: 'Arial, sans-serif',
       margin: '0 auto',
       minHeight: '100vh',
@@ -317,7 +284,7 @@ function App() {
       <div>
         <FactureTest />
       </div>
-      <div><PlatsList/></div>
+      <div><PlatsList /></div>
       <style>{`
         @keyframes pulse {
           0% { transform: scale(1); }
@@ -457,87 +424,7 @@ function App() {
         </div>
       )}
 
-      {/* ============ SECTION IMPRIMANTES ============ */}
-      <div style={{
-        padding: '15px',
-        background: '#1a1a3e',
-        borderRadius: '8px',
-        marginTop: '20px',
-        border: '1px solid #4a2a6a'
-      }}>
-        <h2 style={{ color: '#ce93d8' }}>🖨️ Imprimantes</h2>
-
-        <button
-          onClick={fetchPrinters}
-          disabled={loadingPrinters}
-          style={{
-            padding: '10px 20px',
-            marginBottom: '15px',
-            background: '#7b1fa2',
-            color: '#e0e0e0',
-            border: 'none',
-            borderRadius: '5px',
-            cursor: loadingPrinters ? 'not-allowed' : 'pointer',
-            opacity: loadingPrinters ? 0.6 : 1
-          }}
-        >
-          {loadingPrinters ? '⏳ Chargement...' : '🔄 Rafraîchir'}
-        </button>
-
-        {printers.length === 0 ? (
-          <p style={{ color: '#888' }}>Aucune imprimante trouvée</p>
-        ) : (
-          <div style={{ display: 'grid', gap: '10px' }}>
-            {printers.map((printer, index) => (
-              <div key={index} style={{
-                padding: '15px',
-                background: '#1a1a3e',
-                borderRadius: '5px',
-                border: '1px solid #3a3a5a',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.3)'
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <h3 style={{ margin: 0, color: '#ce93d8' }}>
-                    {printer.name}
-                    {printer.is_default && (
-                      <span style={{
-                        marginLeft: '10px',
-                        fontSize: '12px',
-                        background: '#2e7d32',
-                        color: '#81c784',
-                        padding: '2px 8px',
-                        borderRadius: '12px'
-                      }}>
-                        ✅ Défaut
-                      </span>
-                    )}
-                  </h3>
-                  <button
-                    onClick={() => getPrinterStatus(printer.name)}
-                    style={{
-                      padding: '5px 15px',
-                      background: '#1565c0',
-                      color: '#e0e0e0',
-                      border: 'none',
-                      borderRadius: '3px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    Voir statut
-                  </button>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '5px', marginTop: '10px' }}>
-                  <p style={{ margin: 0, color: '#b0b0b0' }}><strong style={{ color: '#888' }}>Type:</strong> {printer.connection_type}</p>
-                  <p style={{ margin: 0, color: '#b0b0b0' }}><strong style={{ color: '#888' }}>Statut:</strong> {printer.status}</p>
-                  {printer.model && <p style={{ margin: 0, color: '#b0b0b0' }}><strong style={{ color: '#888' }}>Modèle:</strong> {printer.model}</p>}
-                  {printer.location && <p style={{ margin: 0, color: '#b0b0b0' }}><strong style={{ color: '#888' }}>Emplacement:</strong> {printer.location}</p>}
-                  {printer.port && <p style={{ margin: 0, color: '#b0b0b0' }}><strong style={{ color: '#888' }}>Port:</strong> {printer.port}</p>}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+    
 
       {/* ============ SECTION TEST NOTIFICATION ============ */}
       <div style={{

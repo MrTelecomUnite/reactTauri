@@ -1,0 +1,670 @@
+/* ============ CONTENEUR PRINCIPAL ============ */
+.plats-container {
+    padding: 10px;
+    width: 95%;
+    margin: 0;
+    color: #e0e0e0;
+    font-family: Arial, sans-serif;
+}
+
+/* ============ EN-TÊTE ============ */
+
+.plats-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.plats-header h1 {
+    font-size: 1.5rem;
+    color: #e0e0e0;
+    margin: 0;
+}
+
+.plats-header-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.plats-total-badge {
+    background: rgba(30, 58, 138, 0.5);
+    color: #93c5fd;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    border: 1px solid #1e40af;
+}
+
+.plats-cart-badge {
+    background: rgba(76, 175, 80, 0.15);
+    color: #81c784;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    border: 1px solid #2e7d32;
+}
+
+.plats-cart-total {
+    color: #a5d6a7;
+    font-weight: bold;
+}
+
+/* ============ GRILLE ============ */
+
+.plats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 14px;
+}
+
+/* ============ CARTE PLAT (compacte) ============ */
+
+.plat-card {
+    background: #16213e;
+    border: 1px solid #2a3a6a;
+    border-radius: 10px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.plat-card:hover {
+    border-color: #4a6aaa;
+    transform: translateY(-2px);
+}
+
+/* ============ IMAGE (compacte) ============ */
+
+.plat-image-wrapper {
+    position: relative;
+    width: 100%;
+    height: 120px;
+    /* hauteur réduite */
+    overflow: hidden;
+    background: #0d0d1a;
+}
+
+.plat-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.plat-status {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+}
+
+.plat-status-badge {
+    padding: 3px 8px;
+    border-radius: 10px;
+    font-size: 0.65rem;
+    font-weight: bold;
+}
+
+.plat-status-badge.dispo {
+    background: rgba(34, 84, 61, 0.9);
+    color: #a5d6a7;
+    border: 1px solid #2e7d32;
+}
+
+.plat-status-badge.indispo {
+    background: rgba(84, 34, 34, 0.9);
+    color: #ef9a9a;
+    border: 1px solid #c62828;
+}
+
+/* ============ CORPS DE LA CARTE ============ */
+
+.plat-body {
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1;
+}
+
+/* ============ TITRE + PRIX ============ */
+
+.plat-title-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.plat-title {
+    font-size: 1rem;
+    color: #93c5fd;
+    margin: 0;
+    flex: 1;
+}
+
+.plat-price {
+    font-size: 0.95rem;
+    font-weight: bold;
+    color: #81c784;
+    white-space: nowrap;
+}
+
+/* ============ INFOS COMPACTES ============ */
+
+.plat-info {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 4px 8px;
+    font-size: 0.78rem;
+}
+
+.plat-info-label {
+    color: #888;
+    font-weight: 500;
+}
+
+.plat-info-value {
+    color: #b0b0b0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* ============ RESTAURANT ============ */
+
+.plat-restaurant {
+    margin-top: auto;
+    padding-top: 8px;
+    border-top: 1px solid #2a3a6a;
+    font-size: 0.78rem;
+}
+
+.plat-restaurant-name {
+    color: #ce93d8;
+    font-weight: 500;
+    display: block;
+    margin-bottom: 6px;
+}
+
+/* ============ BADGES PAIEMENT ============ */
+
+.plat-paiements {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 6px;
+}
+
+.plat-paiement-badge {
+    background: #1b3a2a;
+    color: #a5d6a7;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.68rem;
+    border: 1px solid #2a5a3a;
+}
+
+/* ============ DÉTAILS PAIEMENT ============ */
+
+.plat-details {
+    margin-top: 4px;
+}
+
+.plat-details summary {
+    color: #64b5f6;
+    cursor: pointer;
+    font-size: 0.72rem;
+    padding: 2px 0;
+}
+
+.plat-details summary:hover {
+    color: #90caf9;
+}
+
+.plat-details-content {
+    margin-top: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.plat-details-item {
+    background: #0d0d1a;
+    padding: 6px 8px;
+    border-radius: 6px;
+    border: 1px solid #2a2a4a;
+}
+
+.plat-details-name {
+    color: #93c5fd;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin: 0 0 2px 0;
+}
+
+.plat-details-line {
+    color: #888;
+    font-size: 0.68rem;
+    margin: 1px 0;
+}
+
+.plat-details-line .actif {
+    color: #81c784;
+}
+
+.plat-details-line .inactif {
+    color: #ef9a9a;
+}
+
+/* ============ DATE ============ */
+
+.plat-date {
+    color: #666;
+    font-size: 0.65rem;
+    margin: 6px 0 0 0;
+}
+
+/* ============ BOUTON AJOUTER AU PANIER ============ */
+
+.plat-add-btn {
+    margin-top: 8px;
+    width: 100%;
+    padding: 8px 12px;
+    background: linear-gradient(135deg, #2e7d32, #388e3c);
+    color: #e8f5e9;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.82rem;
+    font-weight: bold;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.plat-add-btn:hover:not(:disabled) {
+    transform: scale(1.02);
+    box-shadow: 0 3px 10px rgba(46, 125, 50, 0.4);
+}
+
+.plat-add-btn:active:not(:disabled) {
+    transform: scale(0.98);
+}
+
+.plat-add-btn:disabled {
+    background: #333;
+    color: #666;
+    cursor: not-allowed;
+}
+
+/* ============ CHARGEMENT ============ */
+
+.plats-loading {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    min-height: 400px;
+    color: #888;
+}
+
+.plats-spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid #2a3a6a;
+    border-top-color: #64b5f6;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-bottom: 12px;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* ============ ERREUR ============ */
+
+.plats-error {
+    padding: 16px;
+}
+
+.plats-error-box {
+    background: rgba(139, 0, 0, 0.3);
+    border: 1px solid #c62828;
+    color: #ef9a9a;
+    padding: 12px 16px;
+    border-radius: 8px;
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+/* ============ VIDE ============ */
+
+.plats-empty {
+    text-align: center;
+    padding: 40px 0;
+    color: #888;
+    font-size: 1rem;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* ============ BOUTON PANIER DANS L'EN-TÊTE ============ */
+
+.plats-cart-btn {
+  background: rgba(76, 175, 80, 0.15);
+  color: #81c784;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  border: 1px solid #2e7d32;
+  cursor: pointer;
+  font-weight: bold;
+  transition: all 0.2s ease;
+}
+
+.plats-cart-btn:hover {
+  background: rgba(76, 175, 80, 0.3);
+  transform: scale(1.03);
+  cursor: pointer;
+}
+
+/* ============ OVERLAY FACTURE ============ */
+
+.facture-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  padding: 20px;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.facture-modal {
+  background: #16213e;
+  border: 1px solid #2a3a6a;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 720px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+  animation: slideUp 0.25s ease;
+}
+
+@keyframes slideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+/* ============ EN-TÊTE FACTURE ============ */
+
+.facture-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #2a3a6a;
+  background: #1a1a3e;
+}
+
+.facture-header h2 {
+  margin: 0;
+  font-size: 1.2rem;
+  color: #ce93d8;
+}
+
+.facture-close {
+  background: transparent;
+  border: none;
+  color: #888;
+  font-size: 1.4rem;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.facture-close:hover {
+  color: #ef9a9a;
+  background: rgba(198, 40, 40, 0.2);
+}
+
+/* ============ FACTURE VIDE ============ */
+
+.facture-empty {
+  padding: 40px 20px;
+  text-align: center;
+}
+
+.facture-empty p {
+  color: #888;
+  font-size: 1.1rem;
+  margin: 0;
+}
+
+.facture-empty-hint {
+  color: #666 !important;
+  font-size: 0.85rem !important;
+  margin-top: 8px !important;
+}
+
+/* ============ INFOS FACTURE ============ */
+
+.facture-info {
+  padding: 16px 20px;
+  border-bottom: 1px dashed #2a3a6a;
+  background: #0d0d1a;
+}
+
+.facture-info p {
+  margin: 4px 0;
+  font-size: 0.85rem;
+  color: #b0b0b0;
+}
+
+.facture-info strong {
+  color: #93c5fd;
+  margin-right: 4px;
+}
+
+/* ============ TABLEAU FACTURE ============ */
+
+.facture-table-wrapper {
+  padding: 12px 20px;
+  overflow-x: auto;
+}
+
+.facture-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.facture-table th {
+  text-align: left;
+  padding: 8px 6px;
+  color: #888;
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  border-bottom: 2px solid #2a3a6a;
+  letter-spacing: 0.5px;
+}
+
+.facture-table td {
+  padding: 8px 6px;
+  border-bottom: 1px solid #1a1a3e;
+  color: #e0e0e0;
+}
+
+.facture-designation {
+  color: #e0e0e0;
+  font-weight: 500;
+}
+
+.facture-qte {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.facture-qte-btn {
+  width: 22px;
+  height: 22px;
+  border: 1px solid #2a3a6a;
+  background: #1a1a3e;
+  color: #93c5fd;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+  font-size: 0.8rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.facture-qte-btn:hover {
+  background: #2a3a6a;
+  color: #e0e0e0;
+}
+
+.facture-pu,
+.facture-total {
+  text-align: right;
+  font-family: 'Courier New', monospace;
+}
+
+.facture-total {
+  color: #81c784;
+  font-weight: 600;
+}
+
+.facture-remove {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+  opacity: 0.5;
+  transition: opacity 0.15s ease;
+}
+
+.facture-remove:hover {
+  opacity: 1;
+}
+
+/* ============ TOTAL FACTURE ============ */
+
+.facture-total-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 20px;
+  background: #0d0d1a;
+  border-top: 2px solid #2a3a6a;
+  border-bottom: 2px solid #2a3a6a;
+  font-size: 1.1rem;
+}
+
+.facture-total-row span {
+  color: #888;
+  letter-spacing: 1px;
+}
+
+.facture-total-row strong {
+  color: #81c784;
+  font-size: 1.3rem;
+  font-family: 'Courier New', monospace;
+}
+
+/* ============ ACTIONS FACTURE ============ */
+
+.facture-actions {
+  padding: 16px 20px;
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.facture-btn {
+  padding: 10px 20px;
+  border-radius: 6px;
+  font-weight: bold;
+  font-size: 0.88rem;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s ease;
+}
+
+.facture-btn.vider {
+  background: #2a1a1a;
+  color: #ef9a9a;
+  border: 1px solid #c62828;
+}
+
+.facture-btn.vider:hover {
+  background: #3a1a1a;
+}
+
+.facture-btn.imprimer {
+  background: linear-gradient(135deg, #2e7d32, #388e3c);
+  color: #e8f5e9;
+}
+
+.facture-btn.imprimer:hover {
+  transform: scale(1.03);
+  box-shadow: 0 4px 12px rgba(46, 125, 50, 0.4);
+}
+
+/* ============ RESPONSIVE ============ */
+
+@media (max-width: 600px) {
+  .facture-modal {
+    max-height: 95vh;
+    margin: 10px;
+  }
+
+  .facture-table {
+    font-size: 0.75rem;
+  }
+
+  .facture-actions {
+    flex-direction: column;
+  }
+
+  .facture-btn {
+    width: 100%;
+  }
+}

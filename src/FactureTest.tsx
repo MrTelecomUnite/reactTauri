@@ -25,8 +25,16 @@ function FactureTest() {
                     );
                 }
                 setPrinters(list);
-                const pos = list.find((p) => p.toLowerCase().includes("pos"));
-                setSelectedPrinter(pos || list[0] || "");
+                // ✅ Récupérer la dernière imprimante sauvegardée
+                const savedPrinter = localStorage.getItem("selected_printer");
+
+                // ✅ Vérifier que l'imprimante sauvegardée existe toujours
+                if (savedPrinter && list.includes(savedPrinter)) {
+                    setSelectedPrinter(savedPrinter);
+                } else {
+                    const pos = list.find((p) => p.toLowerCase().includes("pos"));
+                    setSelectedPrinter(pos || list[0] || "");
+                }
             } catch (error) {
                 setStatus(`❌ Impossible de récupérer les imprimantes : ${error}`);
             } finally {
@@ -36,6 +44,13 @@ function FactureTest() {
         fetchPrinters();
     }, []);
 
+    // ============ SAUVEGARDER À CHAQUE CHANGEMENT ============
+    const handlePrinterChange = (printerName: string) => {
+        setSelectedPrinter(printerName);
+
+        localStorage.setItem("selected_printer", printerName);
+    };
+
     const imprimerFacture = async () => {
         if (!selectedPrinter) {
             setStatus("❌ Veuillez sélectionner une imprimante");
@@ -44,7 +59,7 @@ function FactureTest() {
         try {
             setStatus(`⏳ Impression vers "${selectedPrinter}"...`);
 
-       
+
             // 👇 Appel à la commande Rust qui fait TOUT (build + envoi)
             const message = await invoke<string>("imprimer_facture", {
 
@@ -81,8 +96,9 @@ function FactureTest() {
                 </label>
                 <select
                     value={selectedPrinter}
-                    onChange={(e) => setSelectedPrinter(e.target.value)}
+                    onChange={(e) => handlePrinterChange(e.target.value)}
                     disabled={loadingPrinters || printers.length === 0}
+
                     style={{ width: '100%', padding: '10px 12px', background: '#1a1a2e', color: '#e0e0e0', border: '1px solid #3a3a5a', borderRadius: 6 }}
                 >
                     {loadingPrinters ? <option>⏳ Chargement...</option>
