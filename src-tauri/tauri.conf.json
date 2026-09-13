@@ -1,6 +1,6 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "Ku Meza",
+  "productName": "KuMeza",
   "version": "0.1.0",
   "identifier": "com.kumeza.desktop",
   "build": {
@@ -49,10 +49,9 @@
       },
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IERBRUY3NDhFOTU5MjM2MDEKUldRQk5wS1ZqblR2MnFDbEJlTVQ5QW42b3FYdGE5cHdmdmVnenVDZW1mdDgwNXpPR2kwYXhvZWwK",
       "endpoints": [
-        "https://github.com/MrTelecomUnite/ku_meza/releases/latest/download/latest.json"
+        "https://github.com/MrTelecomUnite/reactTauri/releases/latest/download/latest.json"
       ],
-      "dialog": true,
-      "header": "authorization"
+      "dialog": true
     }
   }
 }

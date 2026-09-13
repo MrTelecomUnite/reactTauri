@@ -33,7 +33,7 @@ export async function checkForUpdates(): Promise<void> {
             }
         });
 
-        console.log('update installed');
+       alert('update installed');
 
 
         alert(`Nouvelle version disponible : ${update.version}`);
