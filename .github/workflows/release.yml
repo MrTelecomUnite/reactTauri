@@ -17,26 +17,44 @@ jobs:
 
     steps:
 
+      # ==========================================
+      # Checkout
+      # ==========================================
       - name: Checkout
         uses: actions/checkout@v5
 
+      # ==========================================
+      # Node.js
+      # ==========================================
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
           node-version: "24"
           cache: npm
 
+      # ==========================================
+      # Rust
+      # ==========================================
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
+      # ==========================================
+      # Rust cache
+      # ==========================================
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
           workspaces: "./src-tauri -> target"
 
+      # ==========================================
+      # Installation dépendances
+      # ==========================================
       - name: Install dependencies
         run: npm ci
 
+      # ==========================================
+      # Vérification versions
+      # ==========================================
       - name: Check versions
         run: |
           node --version
@@ -44,6 +62,9 @@ jobs:
           rustc --version
           cargo --version
 
+      # ==========================================
+      # Build + GitHub Release
+      # ==========================================
       - name: Build and publish Tauri
         uses: tauri-apps/tauri-action@v0
 
@@ -70,16 +91,14 @@ jobs:
 
           prerelease: false
 
+          # Générer NSIS + MSI
           args: "--bundles nsis,msi"
 
-          # Générer et envoyer latest.json
+          # Générer latest.json pour Tauri Updater
           includeUpdaterJson: true
-
-          # Envoyer les fichiers .sig
-          uploadUpdaterSignatures: true
 
           # Utiliser NSIS (.exe) pour l'Updater
           updaterJsonPreferNsis: true
 
-          # Réessayer en cas d'échec temporaire
+          # Réessayer en cas de problème temporaire
           retryAttempts: 3

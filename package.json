@@ -8,8 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "tauri": "npx tauri dev",
-    "tauri build": "npx tauri build"
+   "tauri": "tauri"
   },
   "dependencies": {
     "@tauri-apps/plugin-autostart": "^2.5.1",
