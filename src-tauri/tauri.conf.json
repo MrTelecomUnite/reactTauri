@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "KuMeza",
-  "version": "0.1.3",
+  "version": "0.1.2",
   "identifier": "com.kumeza.desktop",
   "build": {
     "frontendDist": "../dist",
@@ -42,9 +42,7 @@
     ],
     "windows": {
       "nsis": {
-        "installerIcon": "icons/icon.ico",
-        "headerImage": "icons/nsis-header.bmp",
-        "sidebarImage": "icons/nsis-sidebar.bmp"
+        "installerIcon": "icons/icon.ico"
       }
     },
     "android": {
