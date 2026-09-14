@@ -8,10 +8,16 @@ import {
   isPermissionGranted,
   requestPermission,
   sendNotification,
+  registerActionTypes,
+  onAction,
 } from '@tauri-apps/plugin-notification';
 import PlatsList from './PlatsList';
-
+import type { PluginListener } from '@tauri-apps/api/core';
 // ============ TYPES ============
+import {
+  getCurrent,
+  onOpenUrl,
+} from "@tauri-apps/plugin-deep-link";
 
 import FactureTest from './FactureTest';
 
@@ -53,18 +59,29 @@ function App() {
   const [notificationTestStatus, setNotificationTestStatus] = useState<string>('');
   const [permissionGranted, setPermissionGranted] = useState<boolean>(false);
 
+  async function focusKuMeza(): Promise<void> {
+    try {
+      await invoke("focus_main_window");
+
+      console.log("✅ Ku Meza est au premier plan");
+    } catch (error) {
+      console.error(
+        "❌ Impossible de mettre Ku Meza au premier plan :",
+        error
+      );
+    }
+  }
 
   // ===== DEMANDER LES PERMISSIONS =====
   useEffect(() => {
     const setupPermissions = async () => {
       try {
         let granted = await isPermissionGranted();
-        console.log('Permission initiale:', granted);
 
         if (!granted) {
           const permission = await requestPermission();
           granted = permission === 'granted';
-          console.log('Permission après demande:', granted);
+
         }
 
         setPermissionGranted(granted);
@@ -77,7 +94,8 @@ function App() {
           sendNotification({
             title: '🔔 Notifications activées',
             body: 'Les notifications système sont prêtes !',
-            sound: "notification_sound.wav"
+            sound: "notification_sound.wav",
+             actionTypeId: 'kumeza-open-app',
           });
         }
       } catch (error) {
@@ -88,7 +106,137 @@ function App() {
     setupPermissions();
   }, []);
 
+  useEffect(() => {
+    let unlisten: PluginListener | undefined;
 
+    const setupNotificationActions = async () => {
+      try {
+        // Enregistrer le type d'action
+        await registerActionTypes([
+          {
+            id: 'kumeza-open-app',
+            actions: [
+              {
+                id: 'open-kumeza',
+                title: 'Ouvrir Ku Meza',
+                foreground: true,
+              },
+            ],
+          },
+        ]);
+
+        // Écouter le clic sur la notification
+        unlisten = await onAction(async (notification) => {
+          console.log('Notification cliquée:', notification);
+
+          if (
+            notification.actionTypeId ===
+            'kumeza-open-app'
+          ) {
+            try {
+              await invoke('focus_main_window');
+
+              console.log(
+                'Ku Meza remis au premier plan'
+              );
+            } catch (error) {
+              console.error(
+                'Impossible de mettre Ku Meza au premier plan:',
+                error
+              );
+
+              alert(
+                `Impossible de mettre Ku Meza au premier plan:\n\n${String(error)}`
+              );
+            }
+          }
+        });
+      } catch (error) {
+        console.error(
+          'Erreur lors de la configuration des actions:',
+          error
+        );
+      }
+    };
+
+    void setupNotificationActions();
+
+    // Nettoyage
+    return () => {
+      if (unlisten) {
+        void unlisten.unregister();
+      }
+    };
+  }, []);
+  useEffect(() => {
+    const handleInitialDeepLink = async (): Promise<void> => {
+      try {
+        const urls = await getCurrent();
+
+        if (!urls || urls.length === 0) {
+          return;
+        }
+
+        console.log(
+          "🔗 Deep link initial :",
+          urls
+        );
+
+        for (const url of urls) {
+          if (url.startsWith("kumeza://")) {
+            alert(
+              `🚀 Ku Meza lancé avec :",
+            ${url}
+          `);
+
+            await focusKuMeza();
+          }
+        }
+      } catch (error) {
+        console.error(
+          "❌ Erreur deep link initial :",
+          error
+        );
+      }
+    };
+
+    void handleInitialDeepLink();
+  }, []);
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+
+    const setupDeepLink = async (): Promise<void> => {
+      try {
+        unlisten = await onOpenUrl(
+          async (urls) => {
+            console.log(
+              "🔗 Deep link reçu :",
+              urls
+            );
+
+            for (const url of urls) {
+              if (url.startsWith("kumeza://")) {
+                await focusKuMeza();
+              }
+            }
+          }
+        );
+      } catch (error) {
+        console.error(
+          "❌ Erreur écoute deep link :",
+          error
+        );
+      }
+    };
+
+    void setupDeepLink();
+
+    return () => {
+      if (unlisten) {
+        unlisten();
+      }
+    };
+  }, []);
   // ===== ÉCOUTER LES ÉVÉNEMENTS =====
   useEffect(() => {
     const setupListeners = async () => {
@@ -111,7 +259,8 @@ function App() {
           sendNotification({
             title: title,
             body: message,
-            sound: "notification_sound.wav"
+            sound: "notification_sound.wav",
+             actionTypeId: 'kumeza-open-app',
           });
         } else {
           console.warn('Permissions non accordées, notification non envoyée');
@@ -183,16 +332,15 @@ function App() {
     }
 
     try {
-      console.log(`📤 Envoi notification ${type}:`, { title, message });
 
       // sendNotification retourne void, pas de catch
       sendNotification({
         title: title,
         body: message,
-        sound: "notification_sound.wav"
+        sound: "notification_sound.wav",
+         actionTypeId: 'kumeza-open-app',
       });
 
-      console.log(`✅ Notification ${type} envoyée avec succès`);
 
       // Afficher un message de succès
       setNotificationTestStatus(`✅ Notification "${title}" envoyée !`);
@@ -243,7 +391,8 @@ function App() {
         sendNotification({
           title: title,
           body: message,
-          sound: 'notification_sound.wav'
+          sound: 'notification_sound.wav',
+           actionTypeId: 'kumeza-open-app',
         });
         console.log(`✅ Notification ${i + 1}/${types.length} envoyée`);
       } catch (error) {

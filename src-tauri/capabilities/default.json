@@ -18,6 +18,10 @@
     "notification:allow-notify",
     "thermal-printer:default",
     "process:allow-restart",
-    "process:allow-exit"
+    "process:allow-exit",
+    "deep-link:default",
+    "core:window:allow-show",
+    "core:window:allow-unminimize",
+    "core:window:allow-set-focus"
   ]
 }

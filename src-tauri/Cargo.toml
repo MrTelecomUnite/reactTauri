@@ -40,7 +40,7 @@ surge-ping = "0.9"
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "net", "time", "macros"] }
 
 # ===== Notifications (natif) =====
-tauri-plugin-notification = "2"
+tauri-plugin-notification = "2.4.0"
 
 # ===== Impression thermique =====
 tauri-plugin-thermal-printer = "2.1.4"
@@ -49,6 +49,11 @@ serialport = "4.10.1"
 
 # ===== Calculs monétaires =====
 rust_decimal = { version = "1.43.0", features = ["macros"] }
+tauri-plugin-deep-link = "2.4.10"
+tauri-plugin-single-instance = { version = "2.4.4", features = ["deep-link"] }
+autostart = "0.1.0"
+dialog = "0.3.0"
+tauri-plugin-dialog = "2"
 
 # ===== Plugins conditionnels (desktop uniquement) =====
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]

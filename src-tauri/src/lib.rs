@@ -1,3 +1,5 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 use local_ip_address::local_ip;
 use serde::Serialize;
 use std::time::Duration;
@@ -5,6 +7,10 @@ use sysinfo::System;
 use tauri::Emitter;
 use tauri_plugin_notification::NotificationExt; // ← IMPORTANT
 
+use tauri::{
+    AppHandle,
+    Manager,
+};
 
 
 #[derive(Serialize, Clone)]
@@ -423,22 +429,115 @@ fn encoder_cp850(s: &str) -> Vec<u8> {
     }).collect()
 }
 
+#[tauri::command]
+fn focus_main_window(app: AppHandle) -> Result<(), String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "Fenêtre principale introuvable".to_string())?;
 
+    // 1. Restaurer si minimisée
+    if window.is_minimized().unwrap_or(false) {
+        let _ = window.unminimize();
+    }
+
+    // 2. Afficher si cachée
+    if !window.is_visible().unwrap_or(true) {
+        let _ = window.show();
+    }
+
+    // 3. Forcer le focus (parfois nécessaire en 2 passes sous Windows)
+    let _ = window.set_focus();
+
+    std::thread::sleep(std::time::Duration::from_millis(80));
+    let _ = window.set_focus();
+
+    // 4. Optionnel : demander à Windows de passer devant
+    #[cfg(target_os = "windows")]
+    {
+        let _ = window.set_always_on_top(true);
+        let _ = window.set_always_on_top(false);
+    }
+
+    Ok(())
+}
 // ============ POINT D'ENTRÉE ============
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+
+    let mut builder = tauri::Builder::default();
+
+    #[cfg(desktop)]
+    {
+        /*
+         * IMPORTANT :
+         * single-instance doit être enregistré avant les autres plugins.
+         */
+        builder = builder.plugin(
+            tauri_plugin_single_instance::init(
+                |app, argv, _cwd| {
+                    println!("Nouvelle instance demandée.");
+                    println!("Arguments : {:?}", argv);
+
+                    if let Some(url) = argv.iter().find(|argument| {
+                        argument.starts_with("kumeza://")
+                    }) {
+                        println!("Deep link reçu : {}", url);
+
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.unminimize();
+                            let _ = window.set_focus();
+                        }
+
+                        let _ = app.emit("kumeza-deep-link", url.clone());
+                    }
+                },
+            )
+        );
+    }
+
+    // ⚠️ Assignation : un seul ; après .setup(...)
+    builder = builder
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_autostart::Builder::new().build())
+        .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_thermal_printer::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_autostart::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             get_system_info,
             check_network_status,
-            imprimer_facture
+            imprimer_facture,
+            focus_main_window
         ])
         .setup(|app| {
+
+            #[cfg(any(windows, target_os = "linux"))]
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                app.deep_link().register_all()?;
+            }
+
+            // ✅ Autostart : activer via le manager, SANS réenregistrer le plugin
+            #[cfg(desktop)]
+            {
+                use tauri_plugin_autostart::ManagerExt;
+
+                let autostart_manager = app.autolaunch();
+
+                if let Err(e) = autostart_manager.enable() {
+                    eprintln!("⚠️ Impossible d'activer l'autostart : {e}");
+                }
+
+                match autostart_manager.is_enabled() {
+                    Ok(true)  => println!("✅ Autostart activé"),
+                    Ok(false) => println!("❌ Autostart désactivé"),
+                    Err(e)    => eprintln!("⚠️ is_enabled() a échoué : {e}"),
+                }
+            }
+
             if cfg!(debug_assertions) {
                 app.handle().plugin(
                     tauri_plugin_log::Builder::default()
@@ -461,20 +560,20 @@ pub fn run() {
                         previous_status = current_status;
 
                         if current_status {
-                            // Notification avec son
                             let _ = app_handle.notification()
                                 .builder()
                                 .title("✅ Connexion rétablie")
                                 .body("La connexion Internet est de nouveau disponible !")
-                                .sound("notification_sound") // ← Nom du son
+                                .sound("notification_sound")
+                                .action_type_id("kumeza-open-app")
                                 .show();
                         } else {
-                            // Notification avec son
                             let _ = app_handle.notification()
                                 .builder()
                                 .title("❌ Connexion perdue")
                                 .body("La connexion Internet a été interrompue. Vérifiez votre réseau.")
-                                .sound("notification_sound") // ← Nom du son
+                                .sound("notification_sound")
+                                .action_type_id("kumeza-open-app")
                                 .show();
                         }
 
@@ -507,7 +606,8 @@ pub fn run() {
                                 "Toujours hors ligne depuis {} minutes",
                                 notification_count * 30 / 60
                             ))
-                            .sound("notification_sound.wav") // ← Nom du son
+                            .action_type_id("kumeza-open-app")
+                            .sound("notification_sound.wav")
                             .show();
 
                         let reminder = NotificationPayload {
@@ -529,7 +629,10 @@ pub fn run() {
             });
 
             Ok(())
-        })
+        });   // ⚠️⚠️⚠️ POINT-VIRGULE QUI MANQUAIT
+
+    // ⚠️ .run() séparé — c'est ICI que l'app démarre vraiment
+    builder
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

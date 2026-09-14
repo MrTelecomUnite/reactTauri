@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "KuMeza",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "identifier": "com.kumeza.desktop",
   "build": {
     "frontendDist": "../dist",
@@ -16,7 +16,10 @@
         "width": 800,
         "height": 600,
         "resizable": true,
-        "fullscreen": false
+        "fullscreen": false,
+        "visible": true,
+        "focus": true,
+        "skipTaskbar": false
       }
     ],
     "security": {
@@ -37,11 +40,26 @@
     "resources": [
       "resources/*"
     ],
+    "windows": {
+      "nsis": {
+        "installerIcon": "icons/icon.ico",
+        "headerImage": "icons/nsis-header.bmp",
+        "sidebarImage": "icons/nsis-sidebar.bmp"
+      }
+    },
     "android": {
       "debugApplicationIdSuffix": ".debug"
     }
   },
   "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": [
+          "kumeza",
+          "my-tauri-app"
+        ]
+      }
+    },
     "updater": {
       "active": true,
       "windows": {
