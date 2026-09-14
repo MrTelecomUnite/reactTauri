@@ -2,16 +2,12 @@
 
 use local_ip_address::local_ip;
 use serde::Serialize;
+use std::io::BufReader;
 use std::time::Duration;
 use sysinfo::System;
 use tauri::Emitter;
-use tauri_plugin_notification::NotificationExt; // ← IMPORTANT
-
-use tauri::{
-    AppHandle,
-    Manager,
-};
-
+use tauri::{AppHandle, Manager, WindowEvent};
+use rodio::{Decoder, OutputStreamBuilder, Sink};
 
 #[derive(Serialize, Clone)]
 struct SystemInfo {
@@ -429,37 +425,200 @@ fn encoder_cp850(s: &str) -> Vec<u8> {
     }).collect()
 }
 
-#[tauri::command]
-fn focus_main_window(app: AppHandle) -> Result<(), String> {
-    let window = app
-        .get_webview_window("main")
-        .ok_or_else(|| "Fenêtre principale introuvable".to_string())?;
 
-    // 1. Restaurer si minimisée
-    if window.is_minimized().unwrap_or(false) {
-        let _ = window.unminimize();
+#[tauri::command] 
+fn send_native_notification( app: AppHandle, title: String, body: String, ) -> Result<(), String> { 
+    #[cfg(target_os = "windows")] {
+         envoyer_notification_clickable( &app, &title, &body, ) .map_err(|error| error.to_string())?; 
+        } 
+         Ok(())
+         }
+
+#[cfg(target_os = "windows")]
+
+// ============================================================
+// SON PERSONNALISÉ
+// ============================================================
+
+#[cfg(target_os = "windows")]
+fn jouer_son_notification(
+    app: &AppHandle,
+) {
+    let resource_path = app
+        .path()
+        .resource_dir()
+        .ok()
+        .map(|path| {
+            path.join("resources")
+                .join("notification_sound.wav")
+        });
+
+    let fallback_path =
+        std::path::PathBuf::from(
+            env!("CARGO_MANIFEST_DIR"),
+        )
+        .join("resources")
+        .join("notification_sound.wav");
+
+    let sound_path = resource_path
+        .filter(|path| path.exists())
+        .unwrap_or(fallback_path);
+
+    if !sound_path.exists() {
+        eprintln!(
+            "❌ Fichier notification introuvable : {:?}",
+            sound_path
+        );
+
+        return;
     }
 
-    // 2. Afficher si cachée
-    if !window.is_visible().unwrap_or(true) {
-        let _ = window.show();
-    }
+    std::thread::spawn(
+        move || {
+            let stream =
+                match OutputStreamBuilder::open_default_stream()
+                {
+                    Ok(stream) => stream,
+                    Err(error) => {
+                        eprintln!(
+                            "❌ Impossible d'ouvrir la sortie audio : {}",
+                            error
+                        );
 
-    // 3. Forcer le focus (parfois nécessaire en 2 passes sous Windows)
-    let _ = window.set_focus();
+                        return;
+                    }
+                };
 
-    std::thread::sleep(std::time::Duration::from_millis(80));
-    let _ = window.set_focus();
+            let file =
+                match std::fs::File::open(
+                    &sound_path,
+                ) {
+                    Ok(file) => file,
+                    Err(error) => {
+                        eprintln!(
+                            "❌ Impossible d'ouvrir le WAV : {}",
+                            error
+                        );
 
-    // 4. Optionnel : demander à Windows de passer devant
-    #[cfg(target_os = "windows")]
-    {
-        let _ = window.set_always_on_top(true);
-        let _ = window.set_always_on_top(false);
-    }
+                        return;
+                    }
+                };
+
+            let source =
+                match Decoder::try_from(
+                    BufReader::new(file),
+                ) {
+                    Ok(source) => source,
+                    Err(error) => {
+                        eprintln!(
+                            "❌ Impossible de décoder notification_sound.wav : {}",
+                            error
+                        );
+
+                        return;
+                    }
+                };
+
+            let sink =
+                Sink::connect_new(
+                    stream.mixer(),
+                );
+
+            sink.append(source);
+
+            sink.sleep_until_end();
+        },
+    );
+}
+
+
+fn envoyer_notification_clickable(
+    app: &AppHandle,
+    title: &str,
+    body: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use tauri_winrt_notification::{Duration, Toast};
+
+    println!("🔔 Création notification Windows...");
+    println!("   Title : {}", title);
+    println!("   Body  : {}", body);
+
+    // Son personnalisé
+    jouer_son_notification(app);
+
+    // Clone AppHandle pour le clic
+    let app_handle = app.clone();
+
+    Toast::new("com.kumeza.desktop")
+        .title(title)
+        .text1(body)
+        .sound(None)
+        .duration(Duration::Short)
+        .on_activated(move |_| {
+            println!("🔔 Notification Ku Meza activée");
+
+            if let Some(window) =
+                app_handle.get_webview_window("main")
+            {
+                // Restaurer si minimisée
+                if window.is_minimized().unwrap_or(false) {
+                    let _ = window.unminimize();
+                }
+
+                // Afficher si cachée
+                if !window.is_visible().unwrap_or(true) {
+                    let _ = window.show();
+                }
+
+                // Donner le focus
+                let _ = window.set_focus();
+
+                #[cfg(target_os = "windows")]
+                {
+                    use windows::Win32::Foundation::HWND;
+                    use windows::Win32::UI::WindowsAndMessaging::{
+                        SetForegroundWindow,
+                        ShowWindow,
+                        SW_RESTORE,
+                    };
+
+                    if let Ok(hwnd) = window.hwnd() {
+                        unsafe {
+                            // Restaurer la fenêtre
+                            let _ = ShowWindow(
+                                HWND(hwnd.0),
+                                SW_RESTORE,
+                            );
+
+                            // Mettre au premier plan
+                            let _ = SetForegroundWindow(
+                                HWND(hwnd.0),
+                            );
+                        }
+                    }
+                }
+
+                println!("✅ Fenêtre Ku Meza restaurée");
+            } else {
+                println!("⚠️ Fenêtre Ku Meza introuvable");
+            }
+
+            Ok(())
+        })
+        .show()
+        .map_err(|error| {
+            eprintln!(
+                "❌ ÉCHEC Toast Windows : {}",
+                error
+            );
+            Box::new(error) as Box<dyn std::error::Error>
+        })?;
+
+    println!("✅ Toast Windows envoyé");
 
     Ok(())
 }
+
 // ============ POINT D'ENTRÉE ============
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -497,7 +656,7 @@ pub fn run() {
         );
     }
 
-    // ⚠️ Assignation : un seul ; après .setup(...)
+   
     builder = builder
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
@@ -510,7 +669,8 @@ pub fn run() {
             get_system_info,
             check_network_status,
             imprimer_facture,
-            focus_main_window
+            send_native_notification
+            
         ])
         .setup(|app| {
 
@@ -519,6 +679,7 @@ pub fn run() {
                 use tauri_plugin_deep_link::DeepLinkExt;
                 app.deep_link().register_all()?;
             }
+
 
             // ✅ Autostart : activer via le manager, SANS réenregistrer le plugin
             #[cfg(desktop)]
@@ -545,88 +706,174 @@ pub fn run() {
                         .build(),
                 )?;
             }
+   if let Some(window) =
+        app.get_webview_window("main")
+    {
+        let app_handle = app.handle().clone();
 
+        window.on_window_event(move |event| {
+
+            if let WindowEvent::CloseRequested { api, .. } = event {
+
+                api.prevent_close();
+
+                if let Some(window) =
+                    app_handle.get_webview_window("main")
+                {
+                    let _ = window.hide();
+                }
+            }
+        });
+    }
+    
             let app_handle = app.handle().clone();
 
-            std::thread::spawn(move || {
-                let mut previous_status = false;
-                let mut notification_count = 0;
-                let mut last_notification_time = std::time::Instant::now();
 
-                loop {
-                    let current_status = check_internet_connection();
 
-                    if current_status != previous_status {
-                        previous_status = current_status;
+std::thread::spawn(move || {
+    let mut previous_status = check_internet_connection();
+    let mut notification_count = 0;
+    let mut last_notification_time = std::time::Instant::now();
 
-                        if current_status {
-                            let _ = app_handle.notification()
-                                .builder()
-                                .title("✅ Connexion rétablie")
-                                .body("La connexion Internet est de nouveau disponible !")
-                                .sound("notification_sound")
-                                .action_type_id("kumeza-open-app")
-                                .show();
-                        } else {
-                            let _ = app_handle.notification()
-                                .builder()
-                                .title("❌ Connexion perdue")
-                                .body("La connexion Internet a été interrompue. Vérifiez votre réseau.")
-                                .sound("notification_sound")
-                                .action_type_id("kumeza-open-app")
-                                .show();
-                        }
+    loop {
+        let current_status = check_internet_connection();
 
-                        let custom_notification = if current_status {
-                            NotificationPayload {
-                                title: "✅ Connexion Internet rétablie".to_string(),
-                                message: "La connexion Internet est de nouveau disponible !".to_string(),
-                                notification_type: "success".to_string(),
-                            }
-                        } else {
-                            NotificationPayload {
-                                title: "❌ Connexion Internet perdue".to_string(),
-                                message: "La connexion Internet a été interrompue. Vérifiez votre réseau.".to_string(),
-                                notification_type: "error".to_string(),
-                            }
-                        };
+        // ==================================================
+        // CHANGEMENT DE STATUT INTERNET
+        // ==================================================
 
-                        let _ = app_handle.emit("internet-status", current_status);
-                        let _ = app_handle.emit("network-notification", custom_notification);
+        if current_status != previous_status {
+            previous_status = current_status;
 
-                        notification_count = 0;
-                        last_notification_time = std::time::Instant::now();
-                    }
+            // --------------------------------------------------
+            // Notification Windows native
+            // --------------------------------------------------
 
-                    if !current_status && last_notification_time.elapsed() > Duration::from_secs(30) {
-                        let _ = app_handle.notification()
-                            .builder()
-                            .title("⚠️ Pas de connexion Internet")
-                            .body(&format!(
-                                "Toujours hors ligne depuis {} minutes",
-                                notification_count * 30 / 60
-                            ))
-                            .action_type_id("kumeza-open-app")
-                            .sound("notification_sound.wav")
-                            .show();
+            #[cfg(target_os = "windows")]
+            {
+                let (title, message) = if current_status {
+                    (
+                        "✅ Connexion Internet rétablie",
+                        "La connexion Internet est de nouveau disponible !",
+                    )
+                } else {
+                    (
+                        "❌ Connexion Internet perdue",
+                        "La connexion Internet a été interrompue. Vérifiez votre réseau.",
+                    )
+                };
 
-                        let reminder = NotificationPayload {
-                            title: "⚠️ Pas de connexion Internet".to_string(),
-                            message: format!(
-                                "Toujours hors ligne depuis {} minutes",
-                                notification_count * 30 / 60
-                            ),
-                            notification_type: "warning".to_string(),
-                        };
-                        let _ = app_handle.emit("network-notification", reminder);
+                let _ = envoyer_notification_clickable(
+                    &app_handle,
+                    title,
+                    message,
+                );
+            }
 
-                        last_notification_time = std::time::Instant::now();
-                        notification_count += 1;
-                    }
+            // --------------------------------------------------
+            // Notification pour React
+            // --------------------------------------------------
 
-                    std::thread::sleep(Duration::from_secs(5));
+            let custom_notification = if current_status {
+                NotificationPayload {
+                    title: "✅ Connexion Internet rétablie".to_string(),
+                    message: "La connexion Internet est de nouveau disponible !".to_string(),
+                    notification_type: "success".to_string(),
                 }
-            });
+            } else {
+                NotificationPayload {
+                    title: "❌ Connexion Internet perdue".to_string(),
+                    message: "La connexion Internet a été interrompue. Vérifiez votre réseau.".to_string(),
+                    notification_type: "error".to_string(),
+                }
+            };
+
+            // Envoyer le statut à React
+            let _ = app_handle.emit(
+                "internet-status",
+                current_status,
+            );
+
+            // Envoyer la notification à React
+            let _ = app_handle.emit(
+                "network-notification",
+                custom_notification,
+            );
+
+            // Réinitialiser le compteur
+            notification_count = 0;
+
+            last_notification_time =
+                std::time::Instant::now();
+        }
+
+        // ==================================================
+        // RAPPEL SI INTERNET TOUJOURS ABSENT
+        // ==================================================
+
+        if !current_status
+            && last_notification_time.elapsed()
+                > Duration::from_secs(30)
+        {
+            // --------------------------------------------------
+            // Notification Windows native
+            // --------------------------------------------------
+
+            #[cfg(target_os = "windows")]
+            {
+                let minutes =
+                    notification_count * 30 / 60;
+
+                let message = format!(
+                    "Toujours hors ligne depuis {} minutes",
+                    minutes
+                );
+
+                let _ = envoyer_notification_clickable(
+                    &app_handle,
+                    "⚠️ Pas de connexion Internet",
+                    &message,
+                );
+            }
+
+            // --------------------------------------------------
+            // Notification pour React
+            // --------------------------------------------------
+
+            let reminder = NotificationPayload {
+                title: "⚠️ Pas de connexion Internet"
+                    .to_string(),
+
+                message: format!(
+                    "Toujours hors ligne depuis {} minutes",
+                    notification_count * 30 / 60
+                ),
+
+                notification_type: "warning"
+                    .to_string(),
+            };
+
+            let _ = app_handle.emit(
+                "network-notification",
+                reminder,
+            );
+
+            // Réinitialiser le timer
+            last_notification_time =
+                std::time::Instant::now();
+
+            notification_count += 1;
+        }
+
+        // ==================================================
+        // ATTENDRE 5 SECONDES
+        // ==================================================
+
+        std::thread::sleep(
+            Duration::from_secs(5)
+        );
+    }
+});
 
             Ok(())
         });   // ⚠️⚠️⚠️ POINT-VIRGULE QUI MANQUAIT

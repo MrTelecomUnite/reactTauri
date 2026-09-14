@@ -4,15 +4,9 @@ import { useEffect, useState } from 'react'
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from '@tauri-apps/api/event';
 import "./App.css"
-import {
-  isPermissionGranted,
-  requestPermission,
-  sendNotification,
-  registerActionTypes,
-  onAction,
-} from '@tauri-apps/plugin-notification';
+
 import PlatsList from './PlatsList';
-import type { PluginListener } from '@tauri-apps/api/core';
+
 // ============ TYPES ============
 import {
   getCurrent,
@@ -44,11 +38,6 @@ interface NetworkInfo {
 }
 
 
-interface NotificationPayload {
-  title: string;
-  message: string;
-  notification_type: 'success' | 'error' | 'warning' | 'info';
-}
 
 // ============ COMPOSANT PRINCIPAL ============
 
@@ -56,118 +45,12 @@ function App() {
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
   const [networkInfo, setNetworkInfo] = useState<NetworkInfo | null>(null);
   const [internetStatus, setInternetStatus] = useState<boolean | null>(null);
-  const [notificationTestStatus, setNotificationTestStatus] = useState<string>('');
-  const [permissionGranted, setPermissionGranted] = useState<boolean>(false);
 
-  async function focusKuMeza(): Promise<void> {
-    try {
-      await invoke("focus_main_window");
-
-      console.log("✅ Ku Meza est au premier plan");
-    } catch (error) {
-      console.error(
-        "❌ Impossible de mettre Ku Meza au premier plan :",
-        error
-      );
-    }
-  }
 
   // ===== DEMANDER LES PERMISSIONS =====
-  useEffect(() => {
-    const setupPermissions = async () => {
-      try {
-        let granted = await isPermissionGranted();
 
-        if (!granted) {
-          const permission = await requestPermission();
-          granted = permission === 'granted';
 
-        }
 
-        setPermissionGranted(granted);
-        setNotificationTestStatus(
-          granted ? '✅ Permissions accordées ✅' : '❌ Permissions refusées ❌'
-        );
-
-        // Test de notification au démarrage (sans catch car sendNotification retourne void)
-        if (granted) {
-          sendNotification({
-            title: '🔔 Notifications activées',
-            body: 'Les notifications système sont prêtes !',
-            sound: "notification_sound.wav",
-             actionTypeId: 'kumeza-open-app',
-          });
-        }
-      } catch (error) {
-        console.error('Erreur de permission:', error);
-        setNotificationTestStatus('❌ Erreur de permission');
-      }
-    };
-    setupPermissions();
-  }, []);
-
-  useEffect(() => {
-    let unlisten: PluginListener | undefined;
-
-    const setupNotificationActions = async () => {
-      try {
-        // Enregistrer le type d'action
-        await registerActionTypes([
-          {
-            id: 'kumeza-open-app',
-            actions: [
-              {
-                id: 'open-kumeza',
-                title: 'Ouvrir Ku Meza',
-                foreground: true,
-              },
-            ],
-          },
-        ]);
-
-        // Écouter le clic sur la notification
-        unlisten = await onAction(async (notification) => {
-          console.log('Notification cliquée:', notification);
-
-          if (
-            notification.actionTypeId ===
-            'kumeza-open-app'
-          ) {
-            try {
-              await invoke('focus_main_window');
-
-              console.log(
-                'Ku Meza remis au premier plan'
-              );
-            } catch (error) {
-              console.error(
-                'Impossible de mettre Ku Meza au premier plan:',
-                error
-              );
-
-              alert(
-                `Impossible de mettre Ku Meza au premier plan:\n\n${String(error)}`
-              );
-            }
-          }
-        });
-      } catch (error) {
-        console.error(
-          'Erreur lors de la configuration des actions:',
-          error
-        );
-      }
-    };
-
-    void setupNotificationActions();
-
-    // Nettoyage
-    return () => {
-      if (unlisten) {
-        void unlisten.unregister();
-      }
-    };
-  }, []);
   useEffect(() => {
     const handleInitialDeepLink = async (): Promise<void> => {
       try {
@@ -188,8 +71,6 @@ function App() {
               `🚀 Ku Meza lancé avec :",
             ${url}
           `);
-
-            await focusKuMeza();
           }
         }
       } catch (error) {
@@ -216,7 +97,7 @@ function App() {
 
             for (const url of urls) {
               if (url.startsWith("kumeza://")) {
-                await focusKuMeza();
+                // await focusKuMeza();
               }
             }
           }
@@ -250,35 +131,17 @@ function App() {
           .catch(console.error);
       });
 
-      // Écouter les notifications réseau
-      const unlistenNotification = await listen<NotificationPayload>('network-notification', (event) => {
-        const { title, message } = event.payload;
-
-        // === NOTIFICATION SYSTÈME UNIQUEMENT ===
-        if (permissionGranted) {
-          sendNotification({
-            title: title,
-            body: message,
-            sound: "notification_sound.wav",
-             actionTypeId: 'kumeza-open-app',
-          });
-        } else {
-          console.warn('Permissions non accordées, notification non envoyée');
-        }
-      });
 
       return () => {
         if (unlistenInternet) {
           unlistenInternet();
         }
-        if (unlistenNotification) {
-          unlistenNotification();
-        }
+
       };
     };
 
     setupListeners();
-  }, [permissionGranted]);
+  }, []);
 
   // ===== CHARGEMENT INITIAL =====
   useEffect(() => {
@@ -297,118 +160,29 @@ function App() {
       .catch((error) => console.error("Erreur check_network_status:", error));
   }, []);
 
-  // ============ FONCTIONS POUR LES IMPRIMANTES ============
-
 
   // ============ FONCTIONS DE TEST DE NOTIFICATION ============
 
-  const testNotification = async (type: 'success' | 'error' | 'warning' | 'info') => {
-    const messages = {
-      success: { title: '✅ Succès !', message: 'La notification de succès fonctionne parfaitement.' },
-      error: { title: '❌ Erreur !', message: 'Ceci est une notification d\'erreur de test.' },
-      warning: { title: '⚠️ Attention !', message: 'Ceci est une notification d\'avertissement.' },
-      info: { title: 'ℹ️ Information', message: 'Ceci est une notification d\'information.' },
-    };
 
-    const { title, message } = messages[type];
 
-    // Vérifier les permissions avant d'envoyer
-    if (!permissionGranted) {
-      alert('⚠️ Permissions non accordées. Demande en cours...');
-      try {
-        const newPermission = await requestPermission();
-        const granted = newPermission === 'granted';
-        setPermissionGranted(granted);
-        setNotificationTestStatus(granted ? '✅ Permissions accordées ✅' : '❌ Permissions refusées ❌');
-
-        if (!granted) {
-          alert('❌ Permission refusée par l\'utilisateur');
-          return;
-        }
-      } catch (error) {
-        alert(`Erreur lors de la demande de permission:, ${error}`);
-        return;
-      }
-    }
-
+  const envoyerNotification = async (
+    title: string,
+    body: string
+  ): Promise<void> => {
     try {
-
-      // sendNotification retourne void, pas de catch
-      sendNotification({
-        title: title,
-        body: message,
-        sound: "notification_sound.wav",
-         actionTypeId: 'kumeza-open-app',
+      await invoke("send_native_notification", {
+        title,
+        body,
       });
-
-
-      // Afficher un message de succès
-      setNotificationTestStatus(`✅ Notification "${title}" envoyée !`);
-      setTimeout(() => {
-        setNotificationTestStatus(permissionGranted ? '✅ Permissions accordées ✅' : '❌ Permissions refusées ❌');
-      }, 3000);
-
     } catch (error) {
-      console.error(`❌ Erreur lors de l'envoi de la notification ${type}:`, error);
-      setNotificationTestStatus(`❌ Erreur: ${error}`);
+      console.error("Erreur notification Windows :", error);
     }
   };
 
-  const testAllNotifications = async () => {
-    const types: ('success' | 'error' | 'warning' | 'info')[] = ['success', 'info', 'warning', 'error'];
 
-    if (!permissionGranted) {
-      try {
-        const newPermission = await requestPermission();
-        const granted = newPermission === 'granted';
-        setPermissionGranted(granted);
-        setNotificationTestStatus(granted ? '✅ Permissions accordées ✅' : '❌ Permissions refusées ❌');
 
-        if (!granted) {
-          console.error('❌ Permission refusée');
-          return;
-        }
-      } catch (error) {
-        console.error('Erreur:', error);
-        return;
-      }
-    }
-
-    setNotificationTestStatus('⏳ Envoi des notifications en cours...');
-
-    for (let i = 0; i < types.length; i++) {
-      const type = types[i];
-      const messages = {
-        success: { title: '✅ Succès !', message: `Notification ${i + 1}/${types.length}` },
-        error: { title: '❌ Erreur !', message: `Notification ${i + 1}/${types.length}` },
-        warning: { title: '⚠️ Attention !', message: `Notification ${i + 1}/${types.length}` },
-        info: { title: 'ℹ️ Information', message: `Notification ${i + 1}/${types.length}` },
-      };
-
-      const { title, message } = messages[type];
-
-      try {
-        sendNotification({
-          title: title,
-          body: message,
-          sound: 'notification_sound.wav',
-           actionTypeId: 'kumeza-open-app',
-        });
-        console.log(`✅ Notification ${i + 1}/${types.length} envoyée`);
-      } catch (error) {
-        console.error(`❌ Erreur notification ${i + 1}:`, error);
-      }
-
-      // Attendre entre chaque notification
-      if (i < types.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 1500));
-      }
-    }
-
-    setNotificationTestStatus('✅ Toutes les notifications ont été envoyées !');
-    setTimeout(() => {
-      setNotificationTestStatus(permissionGranted ? '✅ Permissions accordées ✅' : '❌ Permissions refusées ❌');
-    }, 3000);
+  const testNotification = async (): Promise<void> => {
+    await envoyerNotification("🔔 Ku Meza", "Une nouvelle commande vient d'arriver.");
   };
 
   // ============ RENDU ============
@@ -422,6 +196,9 @@ function App() {
       background: '#1a1a2e',
       color: '#e0e0e0'
     }}>
+      <button onClick={testNotification}>
+        🔔 Tester la notification Windows
+      </button>
       <UpdateNotification />
       <div>
         <FactureTest />
@@ -450,24 +227,7 @@ function App() {
         }
       `}</style>
 
-      {/* ===== STATUT DES PERMISSIONS ===== */}
-      <div style={{
-        padding: '15px',
-        background: permissionGranted ? '#1b3a2a' : '#3a1a1a',
-        borderRadius: '8px',
-        marginBottom: '20px',
-        border: permissionGranted ? '2px solid #4caf50' : '2px solid #f44336'
-      }}>
-        <h3 style={{ color: '#e0e0e0' }}>🔔 Statut des notifications système</h3>
-        <p style={{ margin: 0, color: '#b0b0b0', fontSize: '18px' }}>
-          <strong>{notificationTestStatus}</strong>
-        </p>
-        <p style={{ fontSize: '12px', color: '#888', marginTop: '5px' }}>
-          {permissionGranted
-            ? '✅ Les notifications apparaîtront dans le centre de notification'
-            : '❌ Cliquez sur "Tester" pour demander les permissions'}
-        </p>
-      </div>
+
 
       {/* ===== STATUT INTERNET ===== */}
       <div style={{
@@ -568,150 +328,7 @@ function App() {
 
 
 
-      {/* ============ SECTION TEST NOTIFICATION ============ */}
-      <div style={{
-        padding: '20px',
-        background: 'linear-gradient(135deg, #1a1a3e 0%, #2a1a4e 100%)',
-        borderRadius: '12px',
-        marginTop: '20px',
-        border: '2px solid #4a2a8a',
-        boxShadow: '0 4px 20px rgba(74, 42, 138, 0.3)'
-      }}>
-        <h2 style={{ marginTop: 0, color: '#ce93d8' }}>🔔 Test de notifications système</h2>
 
-        <div style={{
-          padding: '10px',
-          background: '#1a1a2e',
-          borderRadius: '8px',
-          marginBottom: '15px',
-          border: '1px solid #3a3a5a'
-        }}>
-          <p style={{ margin: 0, color: '#b0b0b0' }}>
-            <strong style={{ color: '#888' }}>Statut :</strong> {notificationTestStatus}
-          </p>
-          <p style={{ margin: '5px 0 0', fontSize: '11px', color: '#666' }}>
-            💡 Ouvrez le centre de notification (Win+N) pour voir les notifications
-          </p>
-        </div>
-
-        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-          <button
-            onClick={() => testNotification('success')}
-            style={{
-              padding: '12px 24px',
-              background: 'linear-gradient(135deg, #1b5e20, #2e7d32)',
-              color: '#a5d6a7',
-              border: '1px solid #388e3c',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              fontWeight: 'bold',
-              boxShadow: '0 2px 8px rgba(46, 125, 50, 0.3)',
-              transition: 'transform 0.2s'
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
-            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-          >
-            ✅ Succès
-          </button>
-
-          <button
-            onClick={() => testNotification('info')}
-            style={{
-              padding: '12px 24px',
-              background: 'linear-gradient(135deg, #0d47a1, #1565c0)',
-              color: '#90caf9',
-              border: '1px solid #1976d2',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              fontWeight: 'bold',
-              boxShadow: '0 2px 8px rgba(21, 101, 192, 0.3)',
-              transition: 'transform 0.2s'
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
-            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-          >
-            ℹ️ Information
-          </button>
-
-          <button
-            onClick={() => testNotification('warning')}
-            style={{
-              padding: '12px 24px',
-              background: 'linear-gradient(135deg, #e65100, #f57c00)',
-              color: '#ffcc80',
-              border: '1px solid #fb8c00',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              fontWeight: 'bold',
-              boxShadow: '0 2px 8px rgba(245, 124, 0, 0.3)',
-              transition: 'transform 0.2s'
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
-            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-          >
-            ⚠️ Avertissement
-          </button>
-
-          <button
-            onClick={() => testNotification('error')}
-            style={{
-              padding: '12px 24px',
-              background: 'linear-gradient(135deg, #b71c1c, #c62828)',
-              color: '#ef9a9a',
-              border: '1px solid #d32f2f',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              fontWeight: 'bold',
-              boxShadow: '0 2px 8px rgba(198, 40, 40, 0.3)',
-              transition: 'transform 0.2s'
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
-            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-          >
-            ❌ Erreur
-          </button>
-        </div>
-
-        <div style={{ marginTop: '15px' }}>
-          <button
-            onClick={testAllNotifications}
-            style={{
-              padding: '14px 30px',
-              background: 'linear-gradient(135deg, #4a148c, #6a1b9a)',
-              color: '#ce93d8',
-              border: '1px solid #7b1fa2',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              fontWeight: 'bold',
-              fontSize: '16px',
-              boxShadow: '0 4px 15px rgba(106, 27, 154, 0.4)',
-              transition: 'transform 0.2s',
-              width: '100%'
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
-            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-          >
-            🚀 Tester toutes les notifications (4 types)
-          </button>
-        </div>
-
-        <div style={{
-          marginTop: '15px',
-          padding: '10px',
-          background: 'rgba(26, 26, 46, 0.8)',
-          borderRadius: '8px',
-          fontSize: '13px',
-          color: '#888'
-        }}>
-          <p style={{ margin: 0 }}>
-            💡 Les notifications apparaissent dans le centre de notification de Windows (Win+N)
-            <br />
-            <span style={{ color: '#666' }}>
-              Mode : 📱 Notifications système uniquement
-            </span>
-          </p>
-        </div>
-      </div>
 
       {/* ============ DEBUG ============ */}
       <div style={{
@@ -728,7 +345,6 @@ function App() {
         <details>
           <summary style={{ cursor: 'pointer', color: '#4a4a8a' }}>Afficher les données</summary>
           <div style={{ marginTop: '10px' }}>
-            <p><strong style={{ color: '#6a6a8a' }}>Permissions:</strong> {permissionGranted ? '✅ Accordées' : '❌ Refusées'}</p>
             <pre style={{ color: '#888' }}>{JSON.stringify(systemInfo, null, 2)}</pre>
           </div>
         </details>
