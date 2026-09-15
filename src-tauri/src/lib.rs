@@ -8,6 +8,9 @@ use sysinfo::System;
 use tauri::Emitter;
 use tauri::{AppHandle, Manager, WindowEvent};
 use rodio::{Decoder, OutputStreamBuilder, Sink};
+use std::sync::atomic::{AtomicBool, Ordering};
+
+static WAS_MAXIMIZED: AtomicBool = AtomicBool::new(false);
 
 #[derive(Serialize, Clone)]
 struct SystemInfo {
@@ -555,56 +558,57 @@ fn envoyer_notification_clickable(
         .sound(None)
         .duration(Duration::Short)
         .on_activated(move |_| {
-            println!("🔔 Notification Ku Meza activée");
+    println!("🔔 Notification Ku Meza activée");
 
-            if let Some(window) =
-                app_handle.get_webview_window("main")
-            {
-                // Restaurer si minimisée
-                if window.is_minimized().unwrap_or(false) {
-                    let _ = window.unminimize();
-                }
+    if let Some(window) = app_handle.get_webview_window("main") {
+        // Restaurer si minimisée
+        if window.is_minimized().unwrap_or(false) {
+            let _ = window.unminimize();
+        }
 
-                // Afficher si cachée
-                if !window.is_visible().unwrap_or(true) {
-                    let _ = window.show();
-                }
+        // Afficher si cachée
+        if !window.is_visible().unwrap_or(true) {
+            let _ = window.show();
+        }
 
-                // Donner le focus
-                let _ = window.set_focus();
+        // Restaurer l'état maximisé si nécessaire (PAS de unsafe)
+        if WAS_MAXIMIZED.load(Ordering::SeqCst) {
+            let _ = window.maximize();
+        }
 
-                #[cfg(target_os = "windows")]
-                {
-                    use windows::Win32::Foundation::HWND;
-                    use windows::Win32::UI::WindowsAndMessaging::{
-                        SetForegroundWindow,
-                        ShowWindow,
-                        SW_RESTORE,
-                    };
+        // Donner le focus
+        let _ = window.set_focus();
 
-                    if let Ok(hwnd) = window.hwnd() {
-                        unsafe {
-                            // Restaurer la fenêtre
-                            let _ = ShowWindow(
-                                HWND(hwnd.0),
-                                SW_RESTORE,
-                            );
+        #[cfg(target_os = "windows")]
+        {
+            use windows::Win32::Foundation::HWND;
+            use windows::Win32::UI::WindowsAndMessaging::{
+                SetForegroundWindow,
+                ShowWindow,
+                SW_RESTORE,
+                SW_MAXIMIZE,
+            };
 
-                            // Mettre au premier plan
-                            let _ = SetForegroundWindow(
-                                HWND(hwnd.0),
-                            );
-                        }
+            if let Ok(hwnd) = window.hwnd() {
+                unsafe {
+                    if WAS_MAXIMIZED.load(Ordering::SeqCst) {
+                        let _ = ShowWindow(HWND(hwnd.0), SW_MAXIMIZE);
+                    } else {
+                        let _ = ShowWindow(HWND(hwnd.0), SW_RESTORE);
                     }
+
+                    let _ = SetForegroundWindow(HWND(hwnd.0));
                 }
-
-                println!("✅ Fenêtre Ku Meza restaurée");
-            } else {
-                println!("⚠️ Fenêtre Ku Meza introuvable");
             }
+        }
 
-            Ok(())
-        })
+        println!("✅ Fenêtre Ku Meza restaurée");
+    } else {
+        println!("⚠️ Fenêtre Ku Meza introuvable");
+    }
+
+    Ok(())
+})
         .show()
         .map_err(|error| {
             eprintln!(
@@ -637,6 +641,51 @@ pub fn run() {
                 |app, argv, _cwd| {
                     println!("Nouvelle instance demandée.");
                     println!("Arguments : {:?}", argv);
+
+                         // ─────────────────────────────────
+            // Récupérer la fenêtre principale
+            // ─────────────────────────────────
+           if let Some(window) = app.get_webview_window("main") {
+    println!("🪟 Fenêtre Ku Meza trouvée");
+
+    let _ = window.show();
+
+    if window.is_minimized().unwrap_or(false) {
+        let _ = window.unminimize();
+    }
+
+    // Restaurer l'état maximisé
+    if WAS_MAXIMIZED.load(Ordering::SeqCst) {
+        let _ = window.maximize();
+    }
+
+    let _ = window.set_focus();
+
+    #[cfg(target_os = "windows")]
+    {
+        use windows::Win32::Foundation::HWND;
+        use windows::Win32::UI::WindowsAndMessaging::{
+            SetForegroundWindow, ShowWindow, SW_RESTORE, SW_MAXIMIZE,
+        };
+
+        if let Ok(hwnd) = window.hwnd() {
+            unsafe {
+                if WAS_MAXIMIZED.load(Ordering::SeqCst) {
+                    let _ = ShowWindow(HWND(hwnd.0), SW_MAXIMIZE);
+                } else {
+                    let _ = ShowWindow(HWND(hwnd.0), SW_RESTORE);
+                }
+                let _ = SetForegroundWindow(HWND(hwnd.0));
+            }
+        }
+    }
+
+    println!("✅ Ku Meza réaffiché");
+} else {
+                println!("⚠️ Fenêtre principale introuvable");
+            }
+
+
 
                     if let Some(url) = argv.iter().find(|argument| {
                         argument.starts_with("kumeza://")
@@ -711,19 +760,21 @@ pub fn run() {
     {
         let app_handle = app.handle().clone();
 
-        window.on_window_event(move |event| {
+       window.on_window_event(move |event| {
+    if let WindowEvent::CloseRequested { api, .. } = event {
+        api.prevent_close();
 
-            if let WindowEvent::CloseRequested { api, .. } = event {
+        if let Some(window) = app_handle.get_webview_window("main") {
+            // Sauvegarder l'état maximisé avant de cacher
+            let was_maximized = window.is_maximized().unwrap_or(false);
 
-                api.prevent_close();
+            // Stocker l'état (PAS de unsafe, PAS de =)
+            WAS_MAXIMIZED.store(was_maximized, Ordering::SeqCst);
 
-                if let Some(window) =
-                    app_handle.get_webview_window("main")
-                {
-                    let _ = window.hide();
-                }
-            }
-        });
+            let _ = window.hide();
+        }
+    }
+});
     }
     
             let app_handle = app.handle().clone();
